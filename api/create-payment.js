@@ -88,7 +88,9 @@ module.exports = async (req, res) => {
       email: email,
       document: gerarCPFValido(),
       phone: '5511999999999'
-    }
+    },
+  product: {
+    name: 'LORD
   };
 
   const body = JSON.stringify(payload);

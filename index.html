@@ -92,14 +92,20 @@
       <h1>Milhares de homens já estão testando em segredo… mas o vídeo pode ser removido em breve.</h1>
      
 
-      <!-- player -->
-      <div class="player-wrap">
-        <div class="player" id="player">
-          <video id="vsl" playsinline webkit-playsinline preload="auto"
-                 controlsList="nodownload nofullscreen noremoteplayback"
-                 style="width:100%;height:auto;background:#000;display:block;">
-            Seu navegador não suporta vídeo.
-          </video>
+     <!-- player -->
+<div class="player-wrap" style="width:100%; max-width:850px; margin:0 auto;">
+  <div class="player" id="player" style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; background:#000; border-radius:8px;">
+    <iframe 
+      src="https://dropbox.com" 
+      style="position:absolute; top:0; left:0; width:100%; height:100%; border:0;"
+      allow="autoplay; fullscreen" 
+      allowfullscreen>
+    </iframe>
+  </div>
+</div>
+
+
+
 
           <div class="pause-overlay" id="pauseOverlay" aria-hidden="true" title="Clique para continuar">
             <img id="pauseImage" src="./68f46abd1565980001da6a27.png" alt="Clique para continuar">

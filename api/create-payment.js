@@ -1,14 +1,11 @@
 // API Endpoint: Create Payment (PIX)
 // Serverless function for Vercel
-//
-// Variáveis de ambiente necessárias:
-// - BUCKPAY_SECRET_TOKEN
-// - BUCKPAY_USER_AGENT
+// Full path: api/create-payment.js
 
 const https = require('https');
 
 module.exports = async (req, res) => {
-  // CORS
+  // Configuração obrigatória de cabeçalhos CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -23,12 +20,12 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Puxa o Token de forma 100% segura dos bastidores da Vercel
   const BUCKPAY_TOKEN = process.env.BUCKPAY_SECRET_TOKEN;
-  const BUCKPAY_USER_AGENT = process.env.BUCKPAY_USER_AGENT;
 
   if (!BUCKPAY_TOKEN) {
-    console.error('BUCKPAY_SECRET_TOKEN não configurado');
-    return res.status(500).json({ error: 'Configuração de servidor inválida' });
+    console.error('BUCKPAY_SECRET_TOKEN não configurado na Vercel');
+    return res.status(500).json({ error: 'Configuração de credenciais pendente no servidor.' });
   }
 
   const externalId = `pix_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -36,7 +33,7 @@ module.exports = async (req, res) => {
   const payload = {
     external_id: externalId,
     payment_method: 'pix',
-    amount: 3000,
+    amount: 3000, // R$ 30,00 fixos definidos em centavos
     buyer: {
       name: 'Cliente Teste',
       email: 'cliente@teste.com',
@@ -50,6 +47,7 @@ module.exports = async (req, res) => {
 
   const body = JSON.stringify(payload);
 
+  // Configuração de rede apontando para o servidor de produção oficial
   const options = {
     hostname: '://realtechdev.com.br',
     port: 443,
@@ -57,28 +55,35 @@ module.exports = async (req, res) => {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${BUCKPAY_TOKEN}`,
-      'User-Agent': BUCKPAY_USER_AGENT || 'Mozilla/5.0 (compatible; Checkout/1.0)',
+      'User-Agent': 'Buckpay API', // <--- INCLUÍDO NO HEADER COMO O GERENTE PEDIU!
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(body)
     }
   };
 
   const request = https.request(options, (response) => {
-    let data = '';
-    response.on('data', (chunk) => { data += chunk; });
+    let responseData = '';
+    
+    response.on('data', (chunk) => { 
+      responseData += chunk; 
+    });
+    
     response.on('end', () => {
       try {
-        const parsed = JSON.parse(data);
+        const parsed = JSON.parse(responseData);
+        
         if (response.statusCode >= 200 && response.statusCode < 300) {
           const d = parsed.data || parsed;
+          
+          // Devolve os dados mapeados para o seu index.html ler
           res.status(200).json({
             id: d.id,
             external_id: d.external_id,
             status: d.status,
             payment_method: d.payment_method,
             pix: {
-              code: d.pix?.code,
-              qrcode_base64: d.pix?.qrcode_base64
+              code: d.pix?.code || d.emv || d.pix_code || '',
+              qrcode_base64: d.pix?.qrcode_base64 || d.qrcode_base64 || ''
             },
             total_amount: d.total_amount,
             created_at: d.created_at
@@ -87,19 +92,19 @@ module.exports = async (req, res) => {
           console.error('BuckPay error:', response.statusCode, parsed);
           res.status(response.statusCode).json({
             error: 'Falha ao criar transação',
-            detail: parsed?.error?.detail || parsed?.error?.message
+            detail: parsed?.error?.detail || parsed?.error?.message || responseData
           });
         }
       } catch (err) {
-        console.error('Parse error:', err, data);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Parse error:', err, responseData);
+        res.status(500).json({ error: 'Erro ao processar dados de retorno do gateway' });
       }
     });
   });
 
   request.on('error', (err) => {
     console.error('Request error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Falha na conexão com o servidor de pagamentos' });
   });
 
   request.write(body);

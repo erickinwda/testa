@@ -1,14 +1,11 @@
 // API Endpoint: Create Payment (PIX)
 // Serverless function for Vercel
-//
-// Variáveis de ambiente (configure na Vercel):
-// - BUCKPAY_SECRET_TOKEN: secret token da BuckPay
-// - BUCKPAY_USER_AGENT: valor fornecido pelo gerente (opcional, usa "Buckpay API" como fallback)
+// Full path: api/create-payment.js
 
 const https = require('https');
 
 module.exports = async (req, res) => {
-  // CORS
+  // Cabeçalhos CORS para o navegador aceitar
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -46,8 +43,9 @@ module.exports = async (req, res) => {
 
   const body = JSON.stringify(payload);
 
+  // 🛠️ CONFIGURAÇÃO DE REDE ULTRA-CORRIGIDA E LIMPA SEM PROTOCOLOS:
   const options = {
-    hostname: '://realtechdev.com.br',
+    hostname: 'api.realtechdev.com.br',
     port: 443,
     path: '/v1/transactions',
     method: 'POST',
@@ -60,17 +58,18 @@ module.exports = async (req, res) => {
   };
 
   const request = https.request(options, (response) => {
-    let data = '';
-    response.on('data', (chunk) => { data += chunk; });
+    let responseData = '';
+    response.on('data', (chunk) => { responseData += chunk; });
     response.on('end', () => {
       try {
-        const parsed = JSON.parse(data);
+        const parsed = JSON.parse(responseData);
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
           const d = parsed.data || parsed;
 
-          const pixCode = d.pix?.code || d.emv || d.pix_code || d.pix?.emv;
-          const qrcodeBase64 = d.pix?.qrcode_base64 || d.qrcode_base64;
+          // Varre todas as propriedades de retorno possíveis da BuckPay
+          const pixCode = d.pix?.code || d.emv || d.pix_code || d.pix?.emv || parsed.pix_code || '';
+          const qrcodeBase64 = d.pix?.qrcode_base64 || d.qrcode_base64 || parsed.qrcode_base64 || '';
 
           res.status(200).json({
             id: d.id,
@@ -81,18 +80,18 @@ module.exports = async (req, res) => {
               code: pixCode,
               qrcode_base64: qrcodeBase64
             },
-            total_amount: d.total_amount || d.amount,
+            total_amount: d.total_amount || d.amount || 3000,
             created_at: d.created_at
           });
         } else {
           console.error('BuckPay error:', response.statusCode, parsed);
           res.status(response.statusCode).json({
             error: 'Falha ao criar transação',
-            detail: parsed?.error?.detail || parsed?.error?.message
+            detail: parsed?.error?.detail || parsed?.error?.message || responseData
           });
         }
       } catch (err) {
-        console.error('Parse error:', err, data);
+        console.error('Parse error:', err, responseData);
         res.status(500).json({ error: 'Internal server error' });
       }
     });

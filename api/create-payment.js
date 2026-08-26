@@ -24,13 +24,13 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Configuração secreta do servidor ausente.' });
   }
 
-  const externalId = `pix_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+  const externalId = `id_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-  // Payload oficial em centavos exigido pela BuckPay
+  // Payload oficial em centavos conforme a imagem oficial do sistema
   const payload = JSON.stringify({
-    amount_cents: 3000, 
-    payment_method: 'pix',
     external_id: externalId,
+    payment_method: 'pix',
+    amount: 3000, // Ajustado para 'amount' como pede o cURL da documentação deles
     buyer: {
       name: 'Cliente Teste',
       email: 'cliente@teste.com',
@@ -39,9 +39,9 @@ module.exports = async (req, res) => {
     }
   });
 
-  // CONFIGURAÇÃO CORRIGIDA: Apenas o domínio limpo, sem "https://" e sem "://"
+  // DOMÍNIO ATUALIZADO BASEADO NO SEU PRINT DA BUCKPAY
   const options = {
-    hostname: '://buckpay.com.br',
+    hostname: '://realtechdev.com.br',
     port: 443,
     path: '/v1/transactions',
     method: 'POST',
@@ -65,17 +65,17 @@ module.exports = async (req, res) => {
       try {
         buckpayData = JSON.parse(responseText);
       } catch (parseError) {
-        console.error('Resposta da BuckPay não é JSON válido:', responseText);
+        console.error('Resposta da API não é JSON válido:', responseText);
         return res.status(502).json({
-          error: 'Resposta inválida do servidor BuckPay',
+          error: 'Resposta inválida do servidor de pagamentos',
           detail: responseText.substring(0, 150)
         });
       }
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        console.error('BuckPay recusou com status:', response.statusCode, buckpayData);
+        console.error('A API recusou com status:', response.statusCode, buckpayData);
         return res.status(response.statusCode).json({
-          error: 'Falha ao criar transação na BuckPay',
+          error: 'Falha ao criar transação',
           detail: buckpayData?.error?.message || buckpayData?.error?.detail || responseText
         });
       }
@@ -95,7 +95,7 @@ module.exports = async (req, res) => {
   });
 
   request.on('error', (err) => {
-    console.error('Erro de conexão HTTPS com a BuckPay:', err);
+    console.error('Erro de conexão HTTPS:', err);
     res.status(500).json({ error: 'Erro de comunicação com o gateway', message: err.message });
   });
 

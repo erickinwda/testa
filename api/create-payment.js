@@ -39,10 +39,10 @@ module.exports = async (req, res) => {
     }
   });
 
-  // Configuração manual da requisição HTTPS segura para a API da BuckPay
+  // CONFIGURAÇÃO CORRIGIDA: Apenas o domínio limpo, sem "https://" e sem "://"
   const options = {
     hostname: '://buckpay.com.br',
-    port: 4443, // Porta segura padrão ou 443 convencional se preferir testar
+    port: 443,
     path: '/v1/transactions',
     method: 'POST',
     headers: {
@@ -52,11 +52,6 @@ module.exports = async (req, res) => {
       'Content-Length': Buffer.byteLength(payload)
     }
   };
-
-  // Tenta conectar na porta alternativa 4443 da API deles, senão usa a padrão 443
-  if (options.port === 4443) {
-    options.port = 443;
-  }
 
   const request = https.request(options, (response) => {
     let responseText = '';

@@ -29,21 +29,22 @@ module.exports = async (req, res) => {
 
   const externalId = `pix_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+  // CORREÇÃO CRÍTICA: Enviando o buyer dentro de uma lista [ ] conforme o erro apontou
   const payload = {
     external_id: externalId,
     payment_method: 'pix',
     amount: 3000,
-    buyer: {
-      name: 'Cliente Teste',
-      email: 'cliente@teste.com',
-      document: '00000000000',
-      phone: '5511999999999'
-    }
+    buyer: [
+      {
+        name: 'SEU NOME COMPLETO AQUI',
+        email: 'seu_email_real@teste.com',
+        document: 'SEU_CPF_REAL_AQUI' // Digite apenas os números do seu CPF real
+      }
+    ]
   };
 
   const body = JSON.stringify(payload);
 
-  // 🛠️ CONFIGURAÇÃO DE REDE ULTRA-CORRIGIDA E LIMPA SEM PROTOCOLOS:
   const options = {
     hostname: 'api.realtechdev.com.br',
     port: 443,
@@ -67,7 +68,6 @@ module.exports = async (req, res) => {
         if (response.statusCode >= 200 && response.statusCode < 300) {
           const d = parsed.data || parsed;
 
-          // Varre todas as propriedades de retorno possíveis da BuckPay
           const pixCode = d.pix?.code || d.emv || d.pix_code || d.pix?.emv || parsed.pix_code || '';
           const qrcodeBase64 = d.pix?.qrcode_base64 || d.qrcode_base64 || parsed.qrcode_base64 || '';
 

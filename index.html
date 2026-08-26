@@ -576,82 +576,109 @@ overlay.addEventListener('click', () => {
     <button onclick="abrirCheckoutPix()" style="background-color: #28a745; color: white; padding: 15px 30px; font-size: 18px; border-radius: 5px; font-weight: bold; display: inline-block; border: none; cursor: pointer;">
       Comprar Agora
     </button>
-  </div>
-	
-</style>
+</div>
 
+<!-- SCRIPT ÚNICO CORRIGIDO DO PIX BUCKPAY -->
 <script>
-    // Função para abrir o modal de checkout PIX
-    function abrirCheckoutPix() {
-      const modal = document.getElementById('pix-modal');
-      modal.style.display = 'block';
-      
-      // Chama o backend para criar a transação PIX
-      fetch('/api/create-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Dados do pagamento PIX:', data);
+let pixCopiaColaCodigo = "";
 
-        const qrCodeImg = document.getElementById('pix-qr-code');
-        if (data.pix && data.pix.qrcode_base64) {
-          qrCodeImg.src = `data:image/png;base64,${data.pix.qrcode_base64}`;
-        }
+async function abrirCheckoutPix() {
+  const modal = document.getElementById('pix-modal');
+  // O OpenCode usou dois IDs diferentes nos testes dele. Vamos garantir que pegue o certo:
+  const qrCodeImg = document.getElementById('pix-qrcode') || document.getElementById('pix-qr-code');
+  
+  if (modal) {
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '99999';
+  }
+  if (qrCodeImg) qrCodeImg.style.display = 'none';
 
-        const codeInput = document.getElementById('pix-code-text');
-        if (data.pix && data.pix.code) {
-          codeInput.value = data.pix.code;
-        }
-      })
-      .catch(error => {
-        console.error('Erro ao criar pagamento PIX:', error);
-        alert('Erro ao gerar pagamento PIX. Tente novamente.');
-      });
+  try {
+    const response = await fetch('/api/create-payment', { method: 'POST' });
+    const data = await response.json();
+
+    if (!response.ok) throw new Error(data.error || 'Erro na requisição');
+
+    // Varre todas as possibilidades de resposta de texto da BuckPay
+    pixCopiaColaCodigo = data.pix?.code || data.pix?.emv || data.pix?.pix_code || data.emv || data.pix_code || (data.raw && (data.raw.pix_code || data.raw.emv)) || '';
+    
+    // Alimenta todos os possíveis campos de texto que o modal pode ter
+    const inputVisivel = document.querySelector('#pix-modal input[type="text"]') || document.getElementById('pix-code-text');
+    if (inputVisivel) {
+      inputVisivel.value = pixCopiaColaCodigo;
+    }
+    
+    const inputHidden = document.getElementById('pix-code-hidden');
+    if (inputHidden) {
+      inputHidden.value = pixCopiaColaCodigo;
     }
 
-    function copiarCodigoPix() {
-      const code = document.getElementById('pix-code-text').value;
-      if (!code) return;
-      navigator.clipboard.writeText(code).then(() => {
-        const btn = document.getElementById('pix-copy-btn');
-        btn.textContent = '✓ Código Copiado!';
-        btn.style.background = '#1e7e34';
-        setTimeout(() => {
-          btn.textContent = 'Copiar Código PIX';
-          btn.style.background = '#28a745';
-        }, 3000);
-      }).catch(() => {
-        const input = document.createElement('textarea');
-        input.value = code;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
-        const btn = document.getElementById('pix-copy-btn');
-        btn.textContent = '✓ Código Copiado!';
-        btn.style.background = '#1e7e34';
-        setTimeout(() => {
-          btn.textContent = 'Copiar Código PIX';
-          btn.style.background = '#28a745';
-        }, 3000);
-      });
-    }
-
-    function fecharModalPix() {
-      document.getElementById('pix-modal').style.display = 'none';
-    }
-
-    window.onclick = function(event) {
-      const modal = document.getElementById('pix-modal');
-      if (event.target === modal) {
-        modal.style.display = 'none';
+    // Varre todas as possibilidades de resposta de imagem da BuckPay
+    let base64 = data.pix?.qrcode_base64 || data.pix?.qrcode || data.qrcode_base64 || data.qrcode || (data.raw && (data.raw.qrcode_base64 || data.raw.qrcode)) || '';
+    
+    if (base64 && qrCodeImg) {
+      if (!base64.startsWith('data:')) {
+        base64 = `data:image/png;base64,${base64}`;
       }
+      qrCodeImg.src = base64;
+      qrCodeImg.style.display = 'block';
     }
-  </script>
+
+  } catch (error) {
+    console.error('Erro no checkout:', error);
+    alert('Erro ao gerar pagamento PIX. Verifique os logs na Vercel.');
+  }
+}
+
+function copiarCodigoPix() {
+  const code = pixCopiaColaCodigo || (document.querySelector('#pix-modal input[type="text"]') || document.getElementById('pix-code-text')).value;
+  if (!code) return;
+  
+  navigator.clipboard.writeText(code).then(() => {
+    alertarCopiado();
+  }).catch(() => {
+    const input = document.createElement('textarea');
+    input.value = code;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    alertarCopiado();
+  });
+}
+
+function alertarCopiado() {
+  const btn = document.getElementById('pix-copy-btn');
+  if (btn) {
+    btn.textContent = '✓ Código Copiado!';
+    btn.style.background = '#1e7e34';
+    setTimeout(() => {
+      btn.textContent = 'Copiar Código PIX';
+      btn.style.background = '#28a745';
+    }, 3000);
+  }
+}
+
+function fecharModalPix() {
+  const modal = document.getElementById('pix-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+window.onclick = function(event) {
+  const modal = document.getElementById('pix-modal');
+  if (event.target === modal) {
+    modal.style.display = 'none';
+  }
+}
+</script>
+
   
 </body>
 </html>

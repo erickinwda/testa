@@ -1,5 +1,7 @@
+const https = require('https');
+
 module.exports = async (req, res) => {
-  // Configuração de cabeçalhos CORS para evitar bloqueios de segurança do navegador
+  // Configuração obrigatória de cabeçalhos CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -22,72 +24,86 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Configuração secreta do servidor ausente.' });
   }
 
-  // Identificador único aleatório exigido para controle interno
   const externalId = `pix_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-  // Payload montado com os nomes exatos exigidos pela BuckPay (Opção 1 - Dados fixos)
-  const payload = {
-    amount_cents: 3000, // R$ 30,00 representados estritamente em centavos
+  // Payload oficial em centavos exigido pela BuckPay
+  const payload = JSON.stringify({
+    amount_cents: 3000, 
     payment_method: 'pix',
     external_id: externalId,
     buyer: {
       name: 'Cliente Teste',
       email: 'cliente@teste.com',
-      document: '00000000000', // CPF de teste fixado
+      document: '00000000000',
       phone: '11999999999'
+    }
+  });
+
+  // Configuração manual da requisição HTTPS segura para a API da BuckPay
+  const options = {
+    hostname: '://buckpay.com.br',
+    port: 4443, // Porta segura padrão ou 443 convencional se preferir testar
+    path: '/v1/transactions',
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${BUCKPAY_TOKEN}`,
+      'User-Agent': BUCKPAY_USER_AGENT,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
     }
   };
 
-  try {
-    // 1. CORREÇÃO DA URL COM "api." NO COMEÇO:
-    const buckpayResponse = await fetch('https://api.buckpay.com.br/v1/transactions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${BUCKPAY_TOKEN}`,
-        'User-Agent': BUCKPAY_USER_AGENT,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    // Lê como texto puro primeiro para capturar logs detalhados caso dê erro
-    const responseText = await buckpayResponse.text();
-    
-    let buckpayData;
-    try {
-      buckpayData = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('Resposta da BuckPay não é um JSON válido. Texto recebido:', responseText);
-      return res.status(502).json({
-        error: 'Resposta inválida do servidor BuckPay',
-        detail: responseText.substring(0, 150)
-      });
-    }
-
-    if (!buckpayResponse.ok) {
-      console.error('BuckPay recusou a requisição:', buckpayResponse.status, buckpayData);
-      return res.status(buckpayResponse.status).json({
-        error: 'Falha ao criar transação na BuckPay',
-        detail: buckpayData?.error?.message || buckpayData?.error?.detail || responseText
-      });
-    }
-
-    // Suporta o retorno vindo com ou sem a propriedade ".data" embrulhada
-    const dataResponse = buckpayData.data || buckpayData;
-
-    // Retorna os dados mapeados de forma limpa para o seu index.html ler
-    res.status(200).json({
-      id: dataResponse.id,
-      status: dataResponse.status,
-      pix: {
-        code: dataResponse.pix?.code || dataResponse.emv || dataResponse.pix_code || '',
-        qrcode_base64: dataResponse.pix?.qrcode_base64 || dataResponse.qrcode_base64 || ''
-      },
-      total_amount: dataResponse.total_amount || 3000
-    });
-
-  } catch (err) {
-    console.error('Erro crítico na função serverless:', err);
-    res.status(500).json({ error: 'Erro interno no processamento do servidor' });
+  // Tenta conectar na porta alternativa 4443 da API deles, senão usa a padrão 443
+  if (options.port === 4443) {
+    options.port = 443;
   }
+
+  const request = https.request(options, (response) => {
+    let responseText = '';
+
+    response.on('data', (chunk) => {
+      responseText += chunk;
+    });
+
+    response.on('end', () => {
+      let buckpayData;
+      try {
+        buckpayData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Resposta da BuckPay não é JSON válido:', responseText);
+        return res.status(502).json({
+          error: 'Resposta inválida do servidor BuckPay',
+          detail: responseText.substring(0, 150)
+        });
+      }
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        console.error('BuckPay recusou com status:', response.statusCode, buckpayData);
+        return res.status(response.statusCode).json({
+          error: 'Falha ao criar transação na BuckPay',
+          detail: buckpayData?.error?.message || buckpayData?.error?.detail || responseText
+        });
+      }
+
+      const dataResponse = buckpayData.data || buckpayData;
+
+      res.status(200).json({
+        id: dataResponse.id,
+        status: dataResponse.status,
+        pix: {
+          code: dataResponse.pix?.code || dataResponse.emv || dataResponse.pix_code || '',
+          qrcode_base64: dataResponse.pix?.qrcode_base64 || dataResponse.qrcode_base64 || ''
+        },
+        total_amount: dataResponse.total_amount || 3000
+      });
+    });
+  });
+
+  request.on('error', (err) => {
+    console.error('Erro de conexão HTTPS com a BuckPay:', err);
+    res.status(500).json({ error: 'Erro de comunicação com o gateway', message: err.message });
+  });
+
+  request.write(payload);
+  request.end();
 };
